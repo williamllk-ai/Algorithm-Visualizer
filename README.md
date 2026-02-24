@@ -1,91 +1,88 @@
-# Algorithm Visualizer
+﻿# Algorithm Visualizer
 
-一个可直接在浏览器打开的算法可视化小项目，支持逐步播放、单步调试、进度拖拽和快捷键操作。
+A browser-based algorithm and data-structure visualizer focused on step-by-step playback and interactive controls.
 
-## Features
+This project is designed as a portfolio-ready demo: easy to run locally, easy to understand, and easy to extend.
 
-- 多算法可视化（当前 8 个）  
-  `Bubble` `Selection` `Insertion` `Shell` `Quick` `Heap` `Linear Search` `Binary Search`
-- 播放控制  
-  `播放/暂停` `上一步` `下一步` `重置` `进度条拖拽` `速度调节`
-- 数据控制  
-  `数据规模` `随机数据` `目标值输入（查找算法）`
-- 键盘快捷键  
-  `Space` `←` `→` `R` `Home`
-- 架构可扩展  
-  算法通过 `registry` 注册，可逐步新增更多算法。
+## What It Supports
+
+### Algorithms
+- Bubble Sort
+- Selection Sort
+- Quick Sort
+- Heap Sort
+- Linear Search
+- Binary Search
+
+### Data Structures
+- Singly Linked List
+- Doubly Linked List
+- Stack (LIFO)
+- Queue (FIFO)
+- Union-Find (Disjoint Set Union)
+- Max Heap (structure operations)
+- Trie (prefix tree)
+
+## UI Controls (English Labels)
+
+### Control Panel
+- `Algorithm`
+- `Data Size`
+- `Speed`
+- `Target` (used by search algorithms)
+- `Timeline`
+
+### Buttons
+- `Random (R)`
+- `Run`
+- `Play / Pause (Space)`
+- `Prev (Left)`
+- `Next (Right)`
+- `Reset (Home)`
+
+### Keyboard Shortcuts
+- `Space`: play / pause
+- `ArrowLeft`: previous step
+- `ArrowRight`: next step
+- `R`: randomize input data
+- `Home`: reset playback position
 
 ## Quick Start
 
-1. 进入目录：`algo-visualizer`
-2. 直接双击 `index.html` 或用本地静态服务器打开
+### Option 1: Open directly
+Open `index.html` in a browser.
 
-如果你安装了 Node.js，也可以用：
-
+### Option 2: Run a local static server (recommended)
 ```bash
-npx serve .
+cd algo-visualizer
+python -m http.server 5500
 ```
+Then open: `http://localhost:5500`
 
 ## Project Structure
 
 ```text
 algo-visualizer/
-  index.html
+  index.html                 # Single-page UI
   src/
-    main.js                  # 交互状态与控制逻辑
-    algorithms/
-      registry.js            # 算法注册表
-      sorting.js             # 排序算法步骤生成
-      search.js              # 查找算法步骤生成
-    ui/
-      renderer.js            # 柱状图渲染与高亮映射
+    app.js                   # Main runtime (algorithms + data structures + rendering + controls)
     styles/
-      main.css               # 样式与响应式布局
+      main.css               # UI styles and visualization styles
 ```
 
-## How To Add A New Algorithm
+## Notes for Contributors
 
-1. 在 `src/algorithms/` 新建模块，输出算法对象：
+- The current runtime entry is `src/app.js`.
+- Add new visualizations by:
+  1. Adding a step generator function.
+  2. Registering it in the `algorithms` list.
+  3. Rendering a new `view` type in the renderer section.
 
-```js
-{
-  id: "unique-id",
-  name: "My Algorithm",
-  category: "分类",
-  description: "一句话描述",
-  needsTarget: false, // 若需要目标值则设为 true
-  generator: (input, target) => steps
-}
-```
+## Why This Repository Is Useful on GitHub
 
-2. `generator` 返回 `steps` 数组，每个 step 结构：
-
-```js
-{
-  array: [ ... ],
-  message: "当前说明",
-  highlights: {
-    compare: [],
-    swap: [],
-    sorted: [],
-    pivot: [],
-    active: [],
-    range: [left, right],
-    found: []
-  }
-}
-```
-
-3. 在 `src/algorithms/registry.js` 注册该算法即可在 UI 下拉框出现。
-
-## Incremental Roadmap
-
-可按阶段逐步扩展：
-
-1. 阶段一（当前完成）：排序 + 查找 + 播放控制
-2. 阶段二：栈/队列/单调栈/并查集可视化
-3. 阶段三：图算法（BFS/DFS/Dijkstra）与网格动画
-4. 阶段四：题目模式（输入样例、自动回放、导出 GIF）
+- Demonstrates algorithm understanding and data-structure operations visually.
+- Includes interaction design (playback, timeline, shortcuts), not just static code.
+- Easy for reviewers/interviewers to run in under one minute.
 
 ## License
 
