@@ -374,6 +374,171 @@ button:hover {
   font-family: "JetBrains Mono", monospace;
 }
 
+.graph-wrap {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 0.45rem;
+}
+
+.graph-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+}
+
+.graph-info-line {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.graph-svg {
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.graph-edge {
+  stroke: #7a8a74;
+  stroke-width: 0.75;
+  opacity: 0.75;
+}
+
+.graph-edge-active {
+  stroke: #f77f00;
+  stroke-width: 1.15;
+  opacity: 1;
+}
+
+.graph-edge-selected {
+  stroke: #2a9d8f;
+  stroke-width: 1.15;
+  opacity: 0.95;
+}
+
+.graph-edge-match {
+  stroke: #6a4c93;
+  stroke-width: 1.2;
+  opacity: 1;
+}
+
+.graph-weight {
+  font-size: 2.7px;
+  fill: #334b2f;
+  text-anchor: middle;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.graph-node {
+  fill: #ffffff;
+  stroke: #51654f;
+  stroke-width: 0.65;
+}
+
+.graph-node-left {
+  fill: #e4f0d9;
+}
+
+.graph-node-right {
+  fill: #e8eef8;
+}
+
+.graph-node-color-a {
+  fill: #7ac943;
+}
+
+.graph-node-color-b {
+  fill: #4d96ff;
+}
+
+.graph-node-visited {
+  stroke: #f4a261;
+  stroke-width: 1;
+}
+
+.graph-node-done {
+  stroke: #2a9d8f;
+  stroke-width: 1.1;
+}
+
+.graph-node-source {
+  stroke: #e63946;
+  stroke-width: 1.1;
+}
+
+.graph-node-active {
+  stroke: #1d4ed8;
+  stroke-width: 1.2;
+}
+
+.graph-node-label {
+  font-size: 2.6px;
+  fill: #1f2a1f;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.graph-dist-label {
+  font-size: 2.25px;
+  fill: #546154;
+  text-anchor: middle;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.matrix-wrap {
+  width: 100%;
+  overflow: auto;
+}
+
+.matrix-table {
+  display: table;
+  border-collapse: collapse;
+  margin: 0 auto;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+}
+
+.matrix-row {
+  display: table-row;
+}
+
+.matrix-cell,
+.matrix-head {
+  display: table-cell;
+  border: 1px solid var(--line);
+  min-width: 52px;
+  text-align: center;
+  padding: 0.28rem 0.42rem;
+  background: #fff;
+}
+
+.matrix-head {
+  font-weight: 600;
+  background: #f4f8f0;
+}
+
+.matrix-corner {
+  background: transparent;
+  border: none;
+}
+
+.matrix-pivot {
+  background: #fff4de;
+}
+
+.matrix-active {
+  background: #d8ecff;
+}
+
+.matrix-updated {
+  background: #d8f5dd;
+  font-weight: 600;
+}
+
 .message {
   margin: 0.7rem 0 0;
   color: var(--ink);

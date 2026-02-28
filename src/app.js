@@ -587,6 +587,950 @@
     return steps;
   }
 
+  function edgeKey(u, v, directed) {
+    if (directed) return u + ">" + v;
+    return u < v ? u + "-" + v : v + "-" + u;
+  }
+
+  function graphStep(message, graph, state) {
+    return dsStep("graph", message, {
+      nodes: deepClone(graph.nodes),
+      edges: deepClone(graph.edges),
+      directed: !!graph.directed,
+      activeNodes: (state && state.activeNodes) ? cloneArray(state.activeNodes) : [],
+      visitedNodes: (state && state.visitedNodes) ? cloneArray(state.visitedNodes) : [],
+      doneNodes: (state && state.doneNodes) ? cloneArray(state.doneNodes) : [],
+      activeEdges: (state && state.activeEdges) ? cloneArray(state.activeEdges) : [],
+      selectedEdges: (state && state.selectedEdges) ? cloneArray(state.selectedEdges) : [],
+      matchEdges: (state && state.matchEdges) ? cloneArray(state.matchEdges) : [],
+      source: (state && typeof state.source === "number") ? state.source : -1,
+      dist: (state && state.dist) ? cloneArray(state.dist) : null,
+      parent: (state && state.parent) ? cloneArray(state.parent) : null,
+      order: (state && state.order) ? cloneArray(state.order) : [],
+      queue: (state && state.queue) ? cloneArray(state.queue) : [],
+      nodeColors: (state && state.nodeColors) ? deepClone(state.nodeColors) : {},
+      leftSet: (state && state.leftSet) ? cloneArray(state.leftSet) : [],
+      rightSet: (state && state.rightSet) ? cloneArray(state.rightSet) : [],
+      extra: (state && state.extra) ? String(state.extra) : "",
+    });
+  }
+
+  function matrixStep(message, matrix, state) {
+    return dsStep("matrix", message, {
+      matrix: deepClone(matrix),
+      inf: (state && state.inf) || 1000000000,
+      active: (state && state.active) ? deepClone(state.active) : null,
+      updated: (state && state.updated) ? deepClone(state.updated) : null,
+      pivot: (state && typeof state.pivot === "number") ? state.pivot : -1,
+    });
+  }
+
+  function buildGraph(nodes, edges, directed) {
+    var graphNodes = [];
+    for (var i = 0; i < nodes.length; i += 1) {
+      graphNodes.push({
+        id: i,
+        x: nodes[i][0],
+        y: nodes[i][1],
+        label: String(i),
+      });
+    }
+    var graphEdges = [];
+    for (var j = 0; j < edges.length; j += 1) {
+      var item = edges[j];
+      graphEdges.push({
+        id: edgeKey(item[0], item[1], directed),
+        u: item[0],
+        v: item[1],
+        w: (typeof item[2] === "number") ? item[2] : null,
+        directed: !!directed,
+      });
+    }
+    return { nodes: graphNodes, edges: graphEdges, directed: !!directed };
+  }
+
+  function buildAdjList(n, edges, directed) {
+    var adj = [];
+    for (var i = 0; i < n; i += 1) adj.push([]);
+    for (var j = 0; j < edges.length; j += 1) {
+      var e = edges[j];
+      adj[e.u].push({ to: e.v, w: e.w, id: e.id });
+      if (!directed) adj[e.v].push({ to: e.u, w: e.w, id: e.id });
+    }
+    for (var k = 0; k < n; k += 1) {
+      adj[k].sort(function (a, b) { return a.to - b.to; });
+    }
+    return adj;
+  }
+
+  function listVisited(visited) {
+    var out = [];
+    for (var i = 0; i < visited.length; i += 1) if (visited[i]) out.push(i);
+    return out;
+  }
+
+  function listDone(done) {
+    return cloneArray(done);
+  }
+
+  function parentEdgeList(parent, directed) {
+    var edges = [];
+    for (var i = 0; i < parent.length; i += 1) {
+      if (parent[i] !== -1) edges.push(edgeKey(parent[i], i, directed));
+    }
+    return edges;
+  }
+
+  function graphTraversalFixture() {
+    return buildGraph(
+      [[12, 42], [30, 20], [30, 64], [48, 14], [50, 42], [52, 70], [76, 50]],
+      [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5], [4, 5], [5, 6]],
+      false
+    );
+  }
+
+  function graphDagFixture() {
+    return buildGraph(
+      [[12, 42], [30, 18], [30, 66], [50, 42], [68, 20], [84, 42]],
+      [[0, 1], [0, 2], [1, 3], [2, 3], [1, 4], [3, 5], [4, 5]],
+      true
+    );
+  }
+
+  function graphWeightedFixture() {
+    return buildGraph(
+      [[10, 46], [28, 20], [30, 68], [54, 24], [78, 46], [54, 74]],
+      [[0, 1, 7], [0, 2, 9], [0, 5, 14], [1, 2, 10], [1, 3, 15], [2, 3, 11], [2, 5, 2], [5, 4, 9], [4, 3, 6]],
+      true
+    );
+  }
+
+  function graphNegativeFixture() {
+    return buildGraph(
+      [[10, 46], [30, 20], [30, 72], [56, 42], [82, 42]],
+      [[0, 1, 4], [0, 2, 5], [1, 2, -2], [1, 3, 6], [2, 3, 1], [3, 4, 2], [2, 4, 5]],
+      true
+    );
+  }
+
+  function graphMstFixture() {
+    return buildGraph(
+      [[12, 46], [30, 18], [30, 74], [52, 26], [56, 70], [82, 48]],
+      [[0, 1, 4], [0, 2, 4], [1, 2, 2], [1, 3, 5], [2, 3, 5], [2, 4, 11], [3, 4, 2], [3, 5, 6], [4, 5, 3]],
+      false
+    );
+  }
+
+  function graphBipartiteFixture() {
+    return buildGraph(
+      [[22, 16], [22, 36], [22, 58], [22, 80], [78, 16], [78, 36], [78, 58], [78, 80]],
+      [[0, 4], [0, 5], [1, 5], [1, 6], [2, 6], [2, 7], [3, 4], [3, 7]],
+      false
+    );
+  }
+
+  function dfsGraphSteps() {
+    var graph = graphTraversalFixture();
+    var n = graph.nodes.length;
+    var adj = buildAdjList(n, graph.edges, false);
+    var visited = [];
+    var done = [];
+    var order = [];
+    var treeEdges = [];
+    var steps = [graphStep("DFS starts at node 0", graph, { activeNodes: [0], order: [] })];
+
+    for (var i = 0; i < n; i += 1) visited.push(false);
+
+    function dfs(u) {
+      visited[u] = true;
+      order.push(u);
+      steps.push(graphStep("Visit node " + u, graph, {
+        activeNodes: [u],
+        visitedNodes: listVisited(visited),
+        selectedEdges: treeEdges,
+        order: order,
+      }));
+
+      for (var k = 0; k < adj[u].length; k += 1) {
+        var edge = adj[u][k];
+        var v = edge.to;
+        steps.push(graphStep("Explore edge " + u + "-" + v, graph, {
+          activeNodes: [u, v],
+          activeEdges: [edge.id],
+          visitedNodes: listVisited(visited),
+          selectedEdges: treeEdges,
+          order: order,
+        }));
+        if (!visited[v]) {
+          treeEdges.push(edge.id);
+          steps.push(graphStep("Take tree edge " + u + "-" + v, graph, {
+            activeNodes: [u, v],
+            activeEdges: [edge.id],
+            visitedNodes: listVisited(visited),
+            selectedEdges: treeEdges,
+            order: order,
+          }));
+          dfs(v);
+        }
+      }
+
+      done.push(u);
+      steps.push(graphStep("Finish node " + u, graph, {
+        visitedNodes: listVisited(visited),
+        doneNodes: listDone(done),
+        selectedEdges: treeEdges,
+        order: order,
+      }));
+    }
+
+    dfs(0);
+    steps.push(graphStep("DFS order: " + order.join(" -> "), graph, {
+      visitedNodes: listVisited(visited),
+      doneNodes: listDone(done),
+      selectedEdges: treeEdges,
+      order: order,
+    }));
+    return steps;
+  }
+
+  function bfsGraphSteps() {
+    var graph = graphTraversalFixture();
+    var n = graph.nodes.length;
+    var adj = buildAdjList(n, graph.edges, false);
+    var visited = [];
+    var order = [];
+    var treeEdges = [];
+    var queue = [0];
+    var steps = [];
+    for (var i = 0; i < n; i += 1) visited.push(false);
+    visited[0] = true;
+
+    steps.push(graphStep("BFS starts at node 0", graph, {
+      activeNodes: [0],
+      visitedNodes: listVisited(visited),
+      queue: queue,
+      order: order,
+    }));
+
+    while (queue.length > 0) {
+      var u = queue.shift();
+      order.push(u);
+      steps.push(graphStep("Pop " + u + " from queue", graph, {
+        activeNodes: [u],
+        visitedNodes: listVisited(visited),
+        selectedEdges: treeEdges,
+        queue: queue,
+        order: order,
+      }));
+
+      for (var k = 0; k < adj[u].length; k += 1) {
+        var edge = adj[u][k];
+        var v = edge.to;
+        steps.push(graphStep("Inspect edge " + u + "-" + v, graph, {
+          activeNodes: [u, v],
+          activeEdges: [edge.id],
+          visitedNodes: listVisited(visited),
+          selectedEdges: treeEdges,
+          queue: queue,
+          order: order,
+        }));
+        if (!visited[v]) {
+          visited[v] = true;
+          queue.push(v);
+          treeEdges.push(edge.id);
+          steps.push(graphStep("Discover node " + v + ", enqueue it", graph, {
+            activeNodes: [v],
+            activeEdges: [edge.id],
+            visitedNodes: listVisited(visited),
+            selectedEdges: treeEdges,
+            queue: queue,
+            order: order,
+          }));
+        }
+      }
+    }
+
+    steps.push(graphStep("BFS order: " + order.join(" -> "), graph, {
+      visitedNodes: listVisited(visited),
+      selectedEdges: treeEdges,
+      order: order,
+    }));
+    return steps;
+  }
+
+  function topoSortSteps() {
+    var graph = graphDagFixture();
+    var n = graph.nodes.length;
+    var adj = buildAdjList(n, graph.edges, true);
+    var indeg = [];
+    var queue = [];
+    var order = [];
+    var steps = [];
+
+    for (var i = 0; i < n; i += 1) indeg.push(0);
+    for (var e = 0; e < graph.edges.length; e += 1) indeg[graph.edges[e].v] += 1;
+    for (var j = 0; j < n; j += 1) if (indeg[j] === 0) queue.push(j);
+
+    steps.push(graphStep("Initial indegree: [" + indeg.join(", ") + "]", graph, {
+      queue: queue,
+      order: order,
+      extra: "nodes with indegree 0 are in queue",
+    }));
+
+    while (queue.length > 0) {
+      var u = queue.shift();
+      order.push(u);
+      steps.push(graphStep("Output node " + u + " in topological order", graph, {
+        activeNodes: [u],
+        queue: queue,
+        order: order,
+      }));
+
+      for (var k = 0; k < adj[u].length; k += 1) {
+        var edge = adj[u][k];
+        var v = edge.to;
+        indeg[v] -= 1;
+        steps.push(graphStep("Decrease indegree of " + v + " to " + indeg[v], graph, {
+          activeNodes: [u, v],
+          activeEdges: [edge.id],
+          queue: queue,
+          order: order,
+          extra: "indegree: [" + indeg.join(", ") + "]",
+        }));
+        if (indeg[v] === 0) {
+          queue.push(v);
+          steps.push(graphStep("Enqueue " + v + " (indegree becomes 0)", graph, {
+            activeNodes: [v],
+            queue: queue,
+            order: order,
+          }));
+        }
+      }
+    }
+
+    steps.push(graphStep("Topological order: " + order.join(" -> "), graph, {
+      doneNodes: order,
+      order: order,
+    }));
+    return steps;
+  }
+
+  function dijkstraSteps() {
+    var INF = 1000000000;
+    var graph = graphWeightedFixture();
+    var n = graph.nodes.length;
+    var adj = buildAdjList(n, graph.edges, true);
+    var dist = [];
+    var parent = [];
+    var used = [];
+    var steps = [];
+    var source = 0;
+
+    for (var i = 0; i < n; i += 1) {
+      dist.push(INF);
+      parent.push(-1);
+      used.push(false);
+    }
+    dist[source] = 0;
+
+    steps.push(graphStep("Initialize Dijkstra from source 0", graph, {
+      source: source,
+      dist: dist,
+      parent: parent,
+      doneNodes: [],
+      selectedEdges: parentEdgeList(parent, true),
+    }));
+
+    for (var iter = 0; iter < n; iter += 1) {
+      var u = -1;
+      for (var j = 0; j < n; j += 1) {
+        if (!used[j] && (u === -1 || dist[j] < dist[u])) u = j;
+      }
+      if (u === -1 || dist[u] >= INF) break;
+      used[u] = true;
+
+      steps.push(graphStep("Choose node " + u + " with minimum tentative distance", graph, {
+        source: source,
+        activeNodes: [u],
+        dist: dist,
+        parent: parent,
+        doneNodes: listVisited(used),
+        selectedEdges: parentEdgeList(parent, true),
+      }));
+
+      for (var k = 0; k < adj[u].length; k += 1) {
+        var edge = adj[u][k];
+        var v = edge.to;
+        var w = edge.w;
+        steps.push(graphStep("Relax edge " + u + "->" + v + " (w=" + w + ")", graph, {
+          source: source,
+          activeNodes: [u, v],
+          activeEdges: [edge.id],
+          dist: dist,
+          parent: parent,
+          doneNodes: listVisited(used),
+          selectedEdges: parentEdgeList(parent, true),
+        }));
+        if (dist[u] + w < dist[v]) {
+          dist[v] = dist[u] + w;
+          parent[v] = u;
+          steps.push(graphStep("Update dist[" + v + "] = " + dist[v], graph, {
+            source: source,
+            activeNodes: [v],
+            activeEdges: [edge.id],
+            dist: dist,
+            parent: parent,
+            doneNodes: listVisited(used),
+            selectedEdges: parentEdgeList(parent, true),
+          }));
+        }
+      }
+    }
+
+    steps.push(graphStep("Dijkstra finished", graph, {
+      source: source,
+      dist: dist,
+      parent: parent,
+      doneNodes: listVisited(used),
+      selectedEdges: parentEdgeList(parent, true),
+    }));
+    return steps;
+  }
+
+  function bellmanFordSteps() {
+    var INF = 1000000000;
+    var graph = graphNegativeFixture();
+    var n = graph.nodes.length;
+    var dist = [];
+    var parent = [];
+    var steps = [];
+    var source = 0;
+
+    for (var i = 0; i < n; i += 1) {
+      dist.push(INF);
+      parent.push(-1);
+    }
+    dist[source] = 0;
+
+    steps.push(graphStep("Initialize Bellman-Ford from source 0", graph, {
+      source: source,
+      dist: dist,
+      parent: parent,
+      selectedEdges: parentEdgeList(parent, true),
+    }));
+
+    for (var round = 1; round <= n - 1; round += 1) {
+      var changed = false;
+      for (var e = 0; e < graph.edges.length; e += 1) {
+        var edge = graph.edges[e];
+        steps.push(graphStep("Round " + round + ", relax " + edge.u + "->" + edge.v + " (w=" + edge.w + ")", graph, {
+          source: source,
+          activeNodes: [edge.u, edge.v],
+          activeEdges: [edge.id],
+          dist: dist,
+          parent: parent,
+          selectedEdges: parentEdgeList(parent, true),
+        }));
+        if (dist[edge.u] < INF && dist[edge.u] + edge.w < dist[edge.v]) {
+          dist[edge.v] = dist[edge.u] + edge.w;
+          parent[edge.v] = edge.u;
+          changed = true;
+          steps.push(graphStep("Update dist[" + edge.v + "] = " + dist[edge.v], graph, {
+            source: source,
+            activeNodes: [edge.v],
+            activeEdges: [edge.id],
+            dist: dist,
+            parent: parent,
+            selectedEdges: parentEdgeList(parent, true),
+          }));
+        }
+      }
+      if (!changed) {
+        steps.push(graphStep("No update in this round, stop early", graph, {
+          source: source,
+          dist: dist,
+          parent: parent,
+          selectedEdges: parentEdgeList(parent, true),
+        }));
+        break;
+      }
+    }
+
+    var hasNegativeCycle = false;
+    for (var c = 0; c < graph.edges.length; c += 1) {
+      var ed = graph.edges[c];
+      if (dist[ed.u] < INF && dist[ed.u] + ed.w < dist[ed.v]) {
+        hasNegativeCycle = true;
+        break;
+      }
+    }
+
+    steps.push(graphStep(hasNegativeCycle ? "Negative cycle detected" : "Bellman-Ford finished", graph, {
+      source: source,
+      dist: dist,
+      parent: parent,
+      selectedEdges: parentEdgeList(parent, true),
+    }));
+    return steps;
+  }
+
+  function spfaSteps() {
+    var INF = 1000000000;
+    var graph = graphNegativeFixture();
+    var n = graph.nodes.length;
+    var adj = buildAdjList(n, graph.edges, true);
+    var dist = [];
+    var parent = [];
+    var inQueue = [];
+    var relaxCount = [];
+    var queue = [0];
+    var steps = [];
+    var source = 0;
+
+    for (var i = 0; i < n; i += 1) {
+      dist.push(INF);
+      parent.push(-1);
+      inQueue.push(false);
+      relaxCount.push(0);
+    }
+    dist[source] = 0;
+    inQueue[source] = true;
+
+    steps.push(graphStep("Initialize SPFA from source 0", graph, {
+      source: source,
+      dist: dist,
+      parent: parent,
+      queue: queue,
+      selectedEdges: parentEdgeList(parent, true),
+    }));
+
+    while (queue.length > 0) {
+      var u = queue.shift();
+      inQueue[u] = false;
+      steps.push(graphStep("Pop node " + u + " from queue", graph, {
+        source: source,
+        activeNodes: [u],
+        dist: dist,
+        parent: parent,
+        queue: queue,
+        selectedEdges: parentEdgeList(parent, true),
+      }));
+
+      for (var k = 0; k < adj[u].length; k += 1) {
+        var edge = adj[u][k];
+        var v = edge.to;
+        var w = edge.w;
+        steps.push(graphStep("Relax edge " + u + "->" + v + " (w=" + w + ")", graph, {
+          source: source,
+          activeNodes: [u, v],
+          activeEdges: [edge.id],
+          dist: dist,
+          parent: parent,
+          queue: queue,
+          selectedEdges: parentEdgeList(parent, true),
+        }));
+        if (dist[u] < INF && dist[u] + w < dist[v]) {
+          dist[v] = dist[u] + w;
+          parent[v] = u;
+          relaxCount[v] += 1;
+          steps.push(graphStep("Update dist[" + v + "] = " + dist[v], graph, {
+            source: source,
+            activeNodes: [v],
+            activeEdges: [edge.id],
+            dist: dist,
+            parent: parent,
+            queue: queue,
+            selectedEdges: parentEdgeList(parent, true),
+          }));
+          if (!inQueue[v]) {
+            queue.push(v);
+            inQueue[v] = true;
+            steps.push(graphStep("Enqueue " + v, graph, {
+              source: source,
+              activeNodes: [v],
+              dist: dist,
+              parent: parent,
+              queue: queue,
+              selectedEdges: parentEdgeList(parent, true),
+            }));
+          }
+        }
+      }
+    }
+
+    steps.push(graphStep("SPFA finished", graph, {
+      source: source,
+      dist: dist,
+      parent: parent,
+      selectedEdges: parentEdgeList(parent, true),
+    }));
+    return steps;
+  }
+
+  function floydSteps() {
+    var INF = 1000000000;
+    var n = 5;
+    var dist = [];
+    var steps = [];
+    var edges = [
+      [0, 1, 3], [0, 2, 8], [0, 4, 7],
+      [1, 0, 8], [1, 2, 2],
+      [2, 3, 1],
+      [3, 0, 2], [3, 4, 1],
+      [4, 3, 2],
+    ];
+
+    for (var i = 0; i < n; i += 1) {
+      dist.push([]);
+      for (var j = 0; j < n; j += 1) {
+        dist[i].push(i === j ? 0 : INF);
+      }
+    }
+    for (var e = 0; e < edges.length; e += 1) {
+      dist[edges[e][0]][edges[e][1]] = edges[e][2];
+    }
+
+    steps.push(matrixStep("Initial distance matrix", dist, { inf: INF }));
+
+    for (var k = 0; k < n; k += 1) {
+      steps.push(matrixStep("Use node " + k + " as intermediate", dist, {
+        inf: INF,
+        pivot: k,
+      }));
+      for (var i2 = 0; i2 < n; i2 += 1) {
+        for (var j2 = 0; j2 < n; j2 += 1) {
+          var candidate = dist[i2][k] + dist[k][j2];
+          if (candidate < dist[i2][j2]) {
+            dist[i2][j2] = candidate;
+            steps.push(matrixStep("Update d[" + i2 + "][" + j2 + "] = " + candidate, dist, {
+              inf: INF,
+              pivot: k,
+              active: { i: i2, j: j2, k: k },
+              updated: { i: i2, j: j2 },
+            }));
+          } else {
+            steps.push(matrixStep("Check d[" + i2 + "][" + j2 + "] via " + k, dist, {
+              inf: INF,
+              pivot: k,
+              active: { i: i2, j: j2, k: k },
+            }));
+          }
+        }
+      }
+    }
+
+    steps.push(matrixStep("Floyd finished", dist, { inf: INF }));
+    return steps;
+  }
+
+  function primSteps() {
+    var INF = 1000000000;
+    var graph = graphMstFixture();
+    var n = graph.nodes.length;
+    var adj = buildAdjList(n, graph.edges, false);
+    var key = [];
+    var parent = [];
+    var inMst = [];
+    var selected = [];
+    var steps = [];
+
+    for (var i = 0; i < n; i += 1) {
+      key.push(INF);
+      parent.push(-1);
+      inMst.push(false);
+    }
+    key[0] = 0;
+
+    steps.push(graphStep("Initialize Prim from node 0", graph, {
+      source: 0,
+      dist: key,
+      parent: parent,
+      selectedEdges: selected,
+    }));
+
+    for (var iter = 0; iter < n; iter += 1) {
+      var u = -1;
+      for (var v = 0; v < n; v += 1) {
+        if (!inMst[v] && (u === -1 || key[v] < key[u])) u = v;
+      }
+      if (u === -1 || key[u] >= INF) break;
+      inMst[u] = true;
+      if (parent[u] !== -1) selected.push(edgeKey(parent[u], u, false));
+
+      steps.push(graphStep("Add node " + u + " into MST", graph, {
+        activeNodes: [u],
+        doneNodes: listVisited(inMst),
+        dist: key,
+        parent: parent,
+        selectedEdges: selected,
+      }));
+
+      for (var k = 0; k < adj[u].length; k += 1) {
+        var edge = adj[u][k];
+        var to = edge.to;
+        var w = edge.w;
+        if (!inMst[to] && w < key[to]) {
+          key[to] = w;
+          parent[to] = u;
+          steps.push(graphStep("Update best edge for node " + to + " to weight " + w, graph, {
+            activeNodes: [u, to],
+            activeEdges: [edge.id],
+            doneNodes: listVisited(inMst),
+            dist: key,
+            parent: parent,
+            selectedEdges: selected,
+          }));
+        }
+      }
+    }
+
+    steps.push(graphStep("Prim finished", graph, {
+      doneNodes: listVisited(inMst),
+      dist: key,
+      parent: parent,
+      selectedEdges: selected,
+    }));
+    return steps;
+  }
+
+  function kruskalSteps() {
+    var graph = graphMstFixture();
+    var n = graph.nodes.length;
+    var edges = deepClone(graph.edges).sort(function (a, b) { return a.w - b.w; });
+    var parent = [];
+    var rank = [];
+    var chosen = [];
+    var steps = [];
+
+    for (var i = 0; i < n; i += 1) {
+      parent.push(i);
+      rank.push(0);
+    }
+
+    function find(x) {
+      if (parent[x] !== x) parent[x] = find(parent[x]);
+      return parent[x];
+    }
+
+    function unite(a, b) {
+      var ra = find(a);
+      var rb = find(b);
+      if (ra === rb) return false;
+      if (rank[ra] < rank[rb]) {
+        var tmp = ra;
+        ra = rb;
+        rb = tmp;
+      }
+      parent[rb] = ra;
+      if (rank[ra] === rank[rb]) rank[ra] += 1;
+      return true;
+    }
+
+    steps.push(graphStep("Sort edges by weight for Kruskal", graph, {
+      selectedEdges: chosen,
+      extra: "sorted edges: " + edges.map(function (e) { return e.u + "-" + e.v + "(" + e.w + ")"; }).join(", "),
+    }));
+
+    for (var e = 0; e < edges.length; e += 1) {
+      var edge = edges[e];
+      steps.push(graphStep("Consider edge " + edge.u + "-" + edge.v + " (w=" + edge.w + ")", graph, {
+        activeNodes: [edge.u, edge.v],
+        activeEdges: [edge.id],
+        selectedEdges: chosen,
+      }));
+      if (unite(edge.u, edge.v)) {
+        chosen.push(edge.id);
+        steps.push(graphStep("Choose edge " + edge.u + "-" + edge.v, graph, {
+          activeNodes: [edge.u, edge.v],
+          activeEdges: [edge.id],
+          selectedEdges: chosen,
+        }));
+      }
+      if (chosen.length === n - 1) break;
+    }
+
+    steps.push(graphStep("Kruskal finished", graph, {
+      selectedEdges: chosen,
+    }));
+    return steps;
+  }
+
+  function bipartiteColoringSteps() {
+    var graph = graphBipartiteFixture();
+    var n = graph.nodes.length;
+    var adj = buildAdjList(n, graph.edges, false);
+    var color = [];
+    var queue = [];
+    var steps = [];
+    var left = [0, 1, 2, 3];
+    var right = [4, 5, 6, 7];
+
+    for (var i = 0; i < n; i += 1) color.push(-1);
+
+    function colorMap() {
+      var map = {};
+      for (var c = 0; c < color.length; c += 1) {
+        if (color[c] !== -1) map[c] = color[c];
+      }
+      return map;
+    }
+
+    for (var s = 0; s < n; s += 1) {
+      if (color[s] !== -1) continue;
+      color[s] = 0;
+      queue.push(s);
+      steps.push(graphStep("Start BFS coloring from node " + s, graph, {
+        activeNodes: [s],
+        queue: queue,
+        nodeColors: colorMap(),
+        leftSet: left,
+        rightSet: right,
+      }));
+
+      while (queue.length > 0) {
+        var u = queue.shift();
+        steps.push(graphStep("Pop node " + u + " for coloring", graph, {
+          activeNodes: [u],
+          queue: queue,
+          nodeColors: colorMap(),
+          leftSet: left,
+          rightSet: right,
+        }));
+        for (var k = 0; k < adj[u].length; k += 1) {
+          var edge = adj[u][k];
+          var v = edge.to;
+          if (color[v] === -1) {
+            color[v] = 1 - color[u];
+            queue.push(v);
+            steps.push(graphStep("Color node " + v + " with color " + color[v], graph, {
+              activeNodes: [u, v],
+              activeEdges: [edge.id],
+              queue: queue,
+              nodeColors: colorMap(),
+              leftSet: left,
+              rightSet: right,
+            }));
+          } else if (color[v] === color[u]) {
+            steps.push(graphStep("Conflict found: graph is not bipartite", graph, {
+              activeNodes: [u, v],
+              activeEdges: [edge.id],
+              queue: queue,
+              nodeColors: colorMap(),
+              leftSet: left,
+              rightSet: right,
+            }));
+            return steps;
+          }
+        }
+      }
+    }
+
+    steps.push(graphStep("Bipartite coloring finished", graph, {
+      nodeColors: colorMap(),
+      leftSet: left,
+      rightSet: right,
+    }));
+    return steps;
+  }
+
+  function hungarianSteps() {
+    var graph = graphBipartiteFixture();
+    var left = [0, 1, 2, 3];
+    var right = [4, 5, 6, 7];
+    var adj = buildAdjList(graph.nodes.length, graph.edges, false);
+    var matchR = {};
+    var steps = [];
+    var i;
+
+    for (i = 0; i < right.length; i += 1) matchR[right[i]] = -1;
+
+    function matchEdges() {
+      var arr = [];
+      for (var r = 0; r < right.length; r += 1) {
+        var rightNode = right[r];
+        if (matchR[rightNode] !== -1) arr.push(edgeKey(matchR[rightNode], rightNode, false));
+      }
+      return arr;
+    }
+
+    function dfsAug(u, seenRight) {
+      for (var k = 0; k < adj[u].length; k += 1) {
+        var v = adj[u][k].to;
+        if (!hasIndex(right, v)) continue;
+        var eid = edgeKey(u, v, false);
+        steps.push(graphStep("Try matching edge " + u + "-" + v, graph, {
+          activeNodes: [u, v],
+          activeEdges: [eid],
+          matchEdges: matchEdges(),
+          leftSet: left,
+          rightSet: right,
+        }));
+
+        if (seenRight[v]) continue;
+        seenRight[v] = true;
+
+        if (matchR[v] === -1) {
+          matchR[v] = u;
+          steps.push(graphStep("Match " + u + " with " + v, graph, {
+            activeNodes: [u, v],
+            activeEdges: [eid],
+            matchEdges: matchEdges(),
+            leftSet: left,
+            rightSet: right,
+          }));
+          return true;
+        }
+
+        steps.push(graphStep("Node " + v + " is matched with " + matchR[v] + ", try rematch", graph, {
+          activeNodes: [u, v, matchR[v]],
+          activeEdges: [eid],
+          matchEdges: matchEdges(),
+          leftSet: left,
+          rightSet: right,
+        }));
+
+        if (dfsAug(matchR[v], seenRight)) {
+          matchR[v] = u;
+          steps.push(graphStep("Augment path success, rematch " + v + " with " + u, graph, {
+            activeNodes: [u, v],
+            activeEdges: [eid],
+            matchEdges: matchEdges(),
+            leftSet: left,
+            rightSet: right,
+          }));
+          return true;
+        }
+      }
+      return false;
+    }
+
+    steps.push(graphStep("Initialize Hungarian (Kuhn) matching", graph, {
+      leftSet: left,
+      rightSet: right,
+      matchEdges: [],
+    }));
+
+    var matched = 0;
+    for (i = 0; i < left.length; i += 1) {
+      var u = left[i];
+      var seen = {};
+      if (dfsAug(u, seen)) matched += 1;
+      steps.push(graphStep("After processing left node " + u + ", matching size = " + matched, graph, {
+        activeNodes: [u],
+        matchEdges: matchEdges(),
+        leftSet: left,
+        rightSet: right,
+      }));
+    }
+
+    steps.push(graphStep("Hungarian finished, maximum matching = " + matched, graph, {
+      matchEdges: matchEdges(),
+      leftSet: left,
+      rightSet: right,
+    }));
+    return steps;
+  }
+
   var algorithms = [
     { id: "bubble-sort", name: "Bubble Sort", category: "Sorting", description: "Compare adjacent elements.", generator: bubbleSortSteps },
     { id: "selection-sort", name: "Selection Sort", category: "Sorting", description: "Select minimum each round.", generator: selectionSortSteps },
@@ -601,6 +1545,17 @@
     { id: "union-find", name: "Union-Find", category: "Data Structure", description: "Union by size + path compression.", generator: unionFindSteps },
     { id: "heap-structure", name: "Heap (Max Heap)", category: "Data Structure", description: "Insert/extract on a binary heap.", generator: heapStructureSteps },
     { id: "trie", name: "Trie", category: "Data Structure", description: "Insert/search on prefix tree.", generator: trieSteps },
+    { id: "graph-dfs", name: "DFS", category: "Graph", description: "Depth-first traversal on an undirected graph.", generator: dfsGraphSteps },
+    { id: "graph-bfs", name: "BFS", category: "Graph", description: "Breadth-first traversal with queue.", generator: bfsGraphSteps },
+    { id: "graph-toposort", name: "Topological Sort", category: "Graph", description: "Kahn algorithm on DAG.", generator: topoSortSteps },
+    { id: "graph-floyd", name: "Floyd-Warshall", category: "Graph", description: "All-pairs shortest path via dynamic programming.", generator: floydSteps },
+    { id: "graph-dijkstra", name: "Dijkstra", category: "Graph", description: "Single-source shortest path with greedy selection.", generator: dijkstraSteps },
+    { id: "graph-bellman-ford", name: "Bellman-Ford", category: "Graph", description: "Shortest path with negative edges support.", generator: bellmanFordSteps },
+    { id: "graph-spfa", name: "SPFA", category: "Graph", description: "Queue-optimized Bellman-Ford.", generator: spfaSteps },
+    { id: "graph-prim", name: "Prim", category: "Graph", description: "Minimum spanning tree by growing a cut.", generator: primSteps },
+    { id: "graph-kruskal", name: "Kruskal", category: "Graph", description: "Minimum spanning tree by edge sorting + DSU.", generator: kruskalSteps },
+    { id: "graph-bipartite-coloring", name: "Bipartite Coloring", category: "Graph", description: "Two-coloring check by BFS.", generator: bipartiteColoringSteps },
+    { id: "graph-hungarian", name: "Hungarian (Kuhn)", category: "Graph", description: "Maximum bipartite matching with augmenting paths.", generator: hungarianSteps },
   ];
 
   function getAlgorithmById(id) {
@@ -816,6 +1771,158 @@
     container.appendChild(layout);
   }
 
+  function graphNumberLabel(value) {
+    if (value === null || typeof value === "undefined") return "-";
+    if (value >= 1000000000) return "INF";
+    return String(value);
+  }
+
+  function renderGraph(container, step) {
+    var data = step.data || {};
+    var nodes = data.nodes || [];
+    var edges = data.edges || [];
+    if (!nodes.length) {
+      container.appendChild(createDiv("ds-empty", "Graph is empty"));
+      return;
+    }
+
+    var wrap = createDiv("graph-wrap", "");
+    var info = createDiv("graph-info", "");
+    if (data.order && data.order.length) info.appendChild(createDiv("graph-info-line", "Order: " + data.order.join(" -> ")));
+    if (data.queue && data.queue.length) info.appendChild(createDiv("graph-info-line", "Queue: [" + data.queue.join(", ") + "]"));
+    if (data.dist) info.appendChild(createDiv("graph-info-line", "Dist: [" + data.dist.map(graphNumberLabel).join(", ") + "]"));
+    if (data.extra) info.appendChild(createDiv("graph-info-line", data.extra));
+    if (info.children.length > 0) wrap.appendChild(info);
+
+    var svgNS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "graph-svg");
+    svg.setAttribute("viewBox", "0 0 100 100");
+
+    var defs = document.createElementNS(svgNS, "defs");
+    var marker = document.createElementNS(svgNS, "marker");
+    marker.setAttribute("id", "graph-arrow");
+    marker.setAttribute("markerWidth", "6");
+    marker.setAttribute("markerHeight", "6");
+    marker.setAttribute("refX", "5");
+    marker.setAttribute("refY", "3");
+    marker.setAttribute("orient", "auto");
+    var markerPath = document.createElementNS(svgNS, "path");
+    markerPath.setAttribute("d", "M0,0 L6,3 L0,6 z");
+    markerPath.setAttribute("fill", "#5d6e5b");
+    marker.appendChild(markerPath);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    for (var e = 0; e < edges.length; e += 1) {
+      var edge = edges[e];
+      var from = nodes[edge.u];
+      var to = nodes[edge.v];
+      var line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", String(from.x));
+      line.setAttribute("y1", String(from.y));
+      line.setAttribute("x2", String(to.x));
+      line.setAttribute("y2", String(to.y));
+      var edgeClass = "graph-edge";
+      if (hasIndex(data.selectedEdges, edge.id)) edgeClass += " graph-edge-selected";
+      if (hasIndex(data.matchEdges, edge.id)) edgeClass += " graph-edge-match";
+      if (hasIndex(data.activeEdges, edge.id)) edgeClass += " graph-edge-active";
+      line.setAttribute("class", edgeClass);
+      if (data.directed || edge.directed) line.setAttribute("marker-end", "url(#graph-arrow)");
+      svg.appendChild(line);
+
+      if (typeof edge.w === "number") {
+        var tx = (from.x + to.x) / 2;
+        var ty = (from.y + to.y) / 2;
+        var text = document.createElementNS(svgNS, "text");
+        text.setAttribute("x", String(tx));
+        text.setAttribute("y", String(ty - 1));
+        text.setAttribute("class", "graph-weight");
+        text.textContent = String(edge.w);
+        svg.appendChild(text);
+      }
+    }
+
+    for (var i = 0; i < nodes.length; i += 1) {
+      var node = nodes[i];
+      var g = document.createElementNS(svgNS, "g");
+
+      var circle = document.createElementNS(svgNS, "circle");
+      circle.setAttribute("cx", String(node.x));
+      circle.setAttribute("cy", String(node.y));
+      circle.setAttribute("r", "4.2");
+      var nodeClass = "graph-node";
+      if (hasIndex(data.leftSet, node.id)) nodeClass += " graph-node-left";
+      if (hasIndex(data.rightSet, node.id)) nodeClass += " graph-node-right";
+      if (data.nodeColors && data.nodeColors[node.id] === 0) nodeClass += " graph-node-color-a";
+      if (data.nodeColors && data.nodeColors[node.id] === 1) nodeClass += " graph-node-color-b";
+      if (hasIndex(data.visitedNodes, node.id)) nodeClass += " graph-node-visited";
+      if (hasIndex(data.doneNodes, node.id)) nodeClass += " graph-node-done";
+      if (node.id === data.source) nodeClass += " graph-node-source";
+      if (hasIndex(data.activeNodes, node.id)) nodeClass += " graph-node-active";
+      circle.setAttribute("class", nodeClass);
+      g.appendChild(circle);
+
+      var label = document.createElementNS(svgNS, "text");
+      label.setAttribute("x", String(node.x));
+      label.setAttribute("y", String(node.y + 1.2));
+      label.setAttribute("class", "graph-node-label");
+      label.textContent = String(node.label);
+      g.appendChild(label);
+
+      if (data.dist && typeof data.dist[node.id] !== "undefined") {
+        var dlabel = document.createElementNS(svgNS, "text");
+        dlabel.setAttribute("x", String(node.x));
+        dlabel.setAttribute("y", String(node.y + 7.5));
+        dlabel.setAttribute("class", "graph-dist-label");
+        dlabel.textContent = graphNumberLabel(data.dist[node.id]);
+        g.appendChild(dlabel);
+      }
+
+      svg.appendChild(g);
+    }
+
+    wrap.appendChild(svg);
+    container.appendChild(wrap);
+  }
+
+  function renderMatrix(container, step) {
+    var data = step.data || {};
+    var matrix = data.matrix || [];
+    if (!matrix.length) {
+      container.appendChild(createDiv("ds-empty", "Matrix is empty"));
+      return;
+    }
+
+    var n = matrix.length;
+    var wrap = createDiv("matrix-wrap", "");
+    var table = createDiv("matrix-table", "");
+
+    var headRow = createDiv("matrix-row", "");
+    headRow.appendChild(createDiv("matrix-head matrix-corner", ""));
+    for (var c = 0; c < n; c += 1) {
+      headRow.appendChild(createDiv("matrix-head", String(c)));
+    }
+    table.appendChild(headRow);
+
+    for (var i = 0; i < n; i += 1) {
+      var row = createDiv("matrix-row", "");
+      row.appendChild(createDiv("matrix-head", String(i)));
+      for (var j = 0; j < n; j += 1) {
+        var cellClass = "matrix-cell";
+        if (data.pivot === i || data.pivot === j) cellClass += " matrix-pivot";
+        if (data.active && data.active.i === i && data.active.j === j) cellClass += " matrix-active";
+        if (data.updated && data.updated.i === i && data.updated.j === j) cellClass += " matrix-updated";
+        var value = matrix[i][j];
+        row.appendChild(createDiv(cellClass, value >= data.inf ? "INF" : String(value)));
+      }
+      table.appendChild(row);
+    }
+
+    wrap.appendChild(table);
+    container.appendChild(wrap);
+  }
+
   function renderStep(container, step) {
     container.innerHTML = "";
     if (!step) {
@@ -830,6 +1937,8 @@
     else if (view === "uf") renderUnionFind(container, step);
     else if (view === "heap") renderHeap(container, step);
     else if (view === "trie") renderTrie(container, step);
+    else if (view === "graph") renderGraph(container, step);
+    else if (view === "matrix") renderMatrix(container, step);
     else container.appendChild(createDiv("ds-empty", "Unknown view"));
   }
 
